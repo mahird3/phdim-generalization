@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+data/
+results/
+trajectories/
+*.pt
+*.pth
+*.npy
+*.npz
+
+# local work not ready for the repo (e.g. the training experiments)
+drafts/
