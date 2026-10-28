@@ -34,7 +34,7 @@ D = distance_matrix(levy_path(1000, 128, 1.5, np.random.default_rng(0)))
 ph_dim(D=D, alpha=1.0)                            # the distance matrix can be reused for other alphas
 ```
 
-The package has three modules: `estimator.py` (distance matrix, MST lifetimes, Algorithm 1), `levy.py` (isotropic β-stable Lévy paths) and `shapes.py` (circle, cube, Sierpinski triangle, random linear embedding). The figures below come from [`notebooks/validation.ipynb`](notebooks/validation.ipynb).
+The package has three modules: `estimator.py` (distance matrix, MST lifetimes, Algorithm 1; the distance matrix is computed with PyTorch, on the GPU when the points are a GPU tensor), `levy.py` (isotropic β-stable Lévy paths) and `shapes.py` (circle, cube, Sierpinski triangle, random linear embedding). The figures below come from [`notebooks/validation.ipynb`](notebooks/validation.ipynb).
 
 ## Validation
 
@@ -74,7 +74,7 @@ With fewer points the estimate gets noisier. At $K = 200$, the number of iterate
 
 ## Tests
 
-The tests in `tests/` (23 in total, run on every push) cover the distance matrix and MST lifetimes on small hand-computed examples, the comparison with Ripser, the known dimensions above, the distribution of the Lévy sampler (characteristic function, Cauchy case), and the two Lévy experiments.
+The tests in `tests/` (24 in total, run on every push) cover the distance matrix (compared with scipy, from numpy and torch inputs) and MST lifetimes on small hand-computed examples, the comparison with Ripser, the known dimensions above, the distribution of the Lévy sampler (characteristic function, Cauchy case), and the two Lévy experiments.
 
 ## Next steps
 

@@ -1,5 +1,7 @@
 import numpy as np
 import pytest
+import torch
+from scipy.spatial.distance import cdist
 
 from phdim import distance_matrix, ph0_lifetimes, ph_dim
 from phdim.shapes import circle, cube, embed, sierpinski
@@ -10,6 +12,13 @@ from phdim.shapes import circle, cube, embed, sierpinski
 def test_distance_matrix_known_values():
     D = distance_matrix([[0, 0], [3, 0], [0, 4]])
     np.testing.assert_allclose(D, [[0, 3, 4], [3, 0, 5], [4, 5, 0]])
+
+
+def test_distance_matrix_matches_scipy():
+    """Same matrix as scipy's reference implementation, from a numpy array or a torch tensor."""
+    X = np.random.default_rng(0).random((50, 1000))
+    for W in (X, torch.from_numpy(X)):
+        np.testing.assert_allclose(distance_matrix(W), cdist(X, X), rtol=1e-12, atol=1e-12)
 
 
 def test_lifetimes_of_points_on_a_line():

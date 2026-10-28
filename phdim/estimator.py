@@ -10,15 +10,20 @@ so the slope m of log E_alpha(k) against log k gives D = alpha / (1 - m).
 """
 
 import numpy as np
+import torch
 from scipy.sparse.csgraph import minimum_spanning_tree
-from scipy.spatial.distance import cdist
 
 
 def distance_matrix(W):
-    """(K, p) array, one point (e.g. one flattened iterate) per row -> (K, K) Euclidean distances."""
-    W = np.asarray(W, dtype=np.float64)
-    W = W - W.mean(axis=0)  # remove the offset shared by all points (precision only)
-    return cdist(W, W)
+    """(K, p) array or tensor, one point (e.g. one flattened iterate) per row -> (K, K) Euclidean distances.
+
+    The distances are computed on the device of W (a GPU tensor stays on the GPU, a numpy array
+    runs on the CPU), and only the small (K, K) result is returned, as a numpy array.
+    """
+    W = torch.as_tensor(W, dtype=torch.float64)
+    W = W - W.mean(dim=0)  # remove the offset shared by all points (precision only)
+    # direct formula: |a|^2 + |b|^2 - 2ab would cancel out the small distances between nearby iterates
+    return torch.cdist(W, W, compute_mode="donot_use_mm_for_euclid_dist").cpu().numpy()
 
 
 def ph0_lifetimes(D):
@@ -32,7 +37,7 @@ def ph0_lifetimes(D):
 def ph_dim(W=None, D=None, alpha=1.0, k_min=None, k_step=None, n_repeats=1, seed=0, return_curve=False):
     """Algorithm 1: PH0 dimension estimate alpha / (1 - m).
 
-    Pass the points W (K, p) or a precomputed distance matrix D (K, K).
+    Pass the points W (K, p), as a numpy array or a torch tensor, or a precomputed distance matrix D (K, K).
     m is the least-squares slope of log E_alpha(k) against log k, where
     E_alpha(k) is the alpha-weighted MST length of a random subset of size k.
     By default about 15 subset sizes are used, from K/10 (at least 20) up to K.
