@@ -5,7 +5,7 @@ The recorder saves the flattened weights of a model after each optimizer step, o
     rec = Recorder(net, n_iterates=200)
     rec.attach(opt)                      # records after every opt.step(), the loop stays unchanged
     ...                                  # train; call rec.start() when near a minimum
-    ph_dim(D=rec.distance_matrix())
+    rec.ph_dim()                         # or ph_dim(D=rec.distance_matrix()) to reuse D
 
 record() does the same by hand, and the decorator @rec.track records after each call of a step function.
 """
@@ -15,7 +15,7 @@ import functools
 import torch
 from torch.nn.utils import parameters_to_vector
 
-from .estimator import distance_matrix
+from .estimator import distance_matrix, ph_dim
 
 
 class Recorder:
@@ -75,3 +75,7 @@ class Recorder:
 
     def distance_matrix(self):
         return distance_matrix(self.traj)
+
+    def ph_dim(self, **kwargs):
+        """PH dimension of the recorded iterates; kwargs (alpha, n_repeats, ...) go to phdim.ph_dim."""
+        return ph_dim(D=self.distance_matrix(), **kwargs)

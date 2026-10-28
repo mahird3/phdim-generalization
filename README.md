@@ -41,7 +41,7 @@ from phdim import Recorder, ph_dim
 
 rec = Recorder(model, n_iterates=200).attach(optimizer)   # records after every optimizer.step()
 ...                                                       # your training; call rec.start() near the minimum
-ph_dim(D=rec.distance_matrix())
+rec.ph_dim()                                              # or ph_dim(D=rec.distance_matrix()) to reuse D
 ```
 
 `rec.record()` records by hand, and `@rec.track` decorates a step function.

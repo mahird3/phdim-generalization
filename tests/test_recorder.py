@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils import parameters_to_vector
 
-from phdim import distance_matrix
+from phdim import distance_matrix, ph_dim
 from phdim.recorder import Recorder
 
 
@@ -87,3 +87,10 @@ def test_track_decorator():
     losses = [train_step(X[i:i + 8], y[i:i + 8]) for i in range(0, 40, 8)]
     assert len(losses) == 5 and isinstance(losses[0], float)  # the step still returns its value
     assert rec.done and rec.traj.shape == (3, sum(p.numel() for p in net.parameters()))
+
+
+def test_ph_dim_shortcut():
+    net, opt, X, y = setup()
+    rec = Recorder(net, n_iterates=100).attach(opt)
+    plain_loop(net, opt, X, y, n_steps=100, rec=rec)
+    assert rec.ph_dim(alpha=0.5) == ph_dim(D=rec.distance_matrix(), alpha=0.5)

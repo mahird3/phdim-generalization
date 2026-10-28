@@ -13,3 +13,4 @@ trajectories/
 # local work not ready for the repo (e.g. the training experiments)
 drafts/
 experiments/
+notebooks/recorder_fcn5_mnist.ipynb
