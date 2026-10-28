@@ -44,7 +44,7 @@ rec = Recorder(model, n_iterates=200).attach(optimizer)   # records after every 
 rec.ph_dim()                                              # or ph_dim(D=rec.distance_matrix()) to reuse D
 ```
 
-`rec.record()` records by hand, and `@rec.track` decorates a step function.
+`rec.record()` records by hand, and `@rec.track` decorates a step function. For large models, `Recorder(model, proj_dim=1000)` stores a random projection of the weights (1000 numbers per iterate) instead of all of them; the distances, hence the dimension, are nearly unchanged (Johnson–Lindenstrauss).
 
 Modules: `estimator.py` (distance matrix on CPU or GPU, MST lifetimes, Algorithm 1), `recorder.py` (iterates of any training loop), `levy.py` (β-stable Lévy paths), `shapes.py` (sets of known dimension) and `training.py` (fcn-5 on MNIST with plain SGD, using the recorder). The tests check the estimator on sets of known dimension and on Lévy paths, whose dimension is β.
 

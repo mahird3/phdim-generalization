@@ -94,3 +94,49 @@ def test_ph_dim_shortcut():
     rec = Recorder(net, n_iterates=100).attach(opt)
     plain_loop(net, opt, X, y, n_steps=100, rec=rec)
     assert rec.ph_dim(alpha=0.5) == ph_dim(D=rec.distance_matrix(), alpha=0.5)
+
+
+def test_projection_keeps_distances():
+    net, opt, X, y = setup()
+    full = Recorder(net, n_iterates=50).attach(opt)
+    proj = Recorder(net, n_iterates=50, proj_dim=2000).attach(opt)  # both record the same iterates
+    full.start()
+    proj.start()
+    plain_loop(net, opt, X, y, n_steps=50)
+    assert proj.traj.shape == (50, 2000)
+    iu = np.triu_indices(50, 1)
+    ratio = proj.distance_matrix()[iu] / full.distance_matrix()[iu]
+    assert np.abs(ratio - 1).max() < 0.1  # typical error 1/sqrt(2k) = 1.6%
+
+
+def test_projection_is_one_fixed_linear_map():
+    net = setup()[0]
+    rec = Recorder(net, proj_dim=64, seed=3)
+    g = torch.Generator().manual_seed(0)
+    w1, w2 = torch.randn(1000, generator=g), torch.randn(1000, generator=g)
+    for block_size in (2**24, 64 * 100):  # one block, or 10 blocks of 100 columns
+        y1 = rec.project(w1, block_size)
+        torch.testing.assert_close(rec.project(w1, block_size), y1, rtol=0, atol=0)  # same P at every call
+        torch.testing.assert_close(rec.project(w1 + 2 * w2, block_size), y1 + 2 * rec.project(w2, block_size))
+
+
+def test_projection_with_large_weights():
+    # steps of 1e-3 on weights of size 1e4: float32 rounding of P w alone would be about as large as the steps
+    net = setup()[0]
+    with torch.no_grad():
+        for p in net.parameters():
+            p.fill_(1e4)
+    full = Recorder(net, n_iterates=30)
+    proj = Recorder(net, n_iterates=30, proj_dim=2000)
+    full.start()
+    proj.start()
+    g = torch.Generator().manual_seed(0)
+    for _ in range(30):
+        with torch.no_grad():
+            for p in net.parameters():
+                p.add_(1e-3 * torch.randn(p.shape, generator=g))
+        full.record()
+        proj.record()
+    iu = np.triu_indices(30, 1)
+    ratio = proj.distance_matrix()[iu] / full.distance_matrix()[iu]
+    assert np.abs(ratio - 1).max() < 0.1
