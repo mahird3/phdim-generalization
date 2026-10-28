@@ -6,10 +6,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.utils import parameters_to_vector
 from torchvision import datasets
 
-from .estimator import distance_matrix
+from .recorder import Recorder
 
 
 def load_mnist(device="cpu", root="data"):
@@ -74,6 +73,7 @@ def train_run(train, test, lr, batch_size, n_iterates=200, max_iters=100_000, ev
     gen = torch.Generator(device=device).manual_seed(seed)
     net = fcn(d_in=X_train.shape[1]).to(device)
     opt = torch.optim.SGD(net.parameters(), lr=lr)  # plain SGD: no momentum, no weight decay
+    rec = Recorder(net, n_iterates).attach(opt)
     stream = batches(len(X_train), batch_size, gen)
     run = {"lr": lr, "batch_size": batch_size}
 
@@ -91,18 +91,17 @@ def train_run(train, test, lr, batch_size, n_iterates=200, max_iters=100_000, ev
         sgd_step(net, opt, X_train[idx], y_train[idx])
         it += 1
 
-    # phase 2: n_iterates more steps near the minimum, saving the flattened weights after each
-    traj = torch.empty(n_iterates, sum(p.numel() for p in net.parameters()), device=device)
-    for t in range(n_iterates):
+    # phase 2: n_iterates more steps near the minimum; the recorder saves the flattened weights after each
+    rec.start()
+    while not rec.done:
         idx = next(stream)
         sgd_step(net, opt, X_train[idx], y_train[idx])
-        traj[t] = parameters_to_vector(net.parameters()).detach()
 
     train_acc, train_loss = evaluate(net, X_train, y_train)
     test_acc, _ = evaluate(net, X_test, y_test)
     run.update(diverged=not np.isfinite(train_loss), converged=converged, iters=it,
                train_acc=train_acc, test_acc=test_acc, gap=train_acc - test_acc,
-               D=distance_matrix(traj), seconds=time.time() - t0)
+               D=rec.distance_matrix(), seconds=time.time() - t0)
     if keep_traj:
-        run["traj"] = traj
+        run["traj"] = rec.traj
     return run

@@ -34,7 +34,19 @@ ph_dim(X)                                         # about 1.9
 ph_dim(D=distance_matrix(X), alpha=0.5)           # the distance matrix can be reused
 ```
 
-Modules: `estimator.py` (distance matrix on CPU or GPU, MST lifetimes, Algorithm 1), `levy.py` (β-stable Lévy paths), `shapes.py` (sets of known dimension) and `training.py` (fcn-5 on MNIST with plain SGD, recording the last iterates). The tests check the estimator on sets of known dimension and on Lévy paths, whose dimension is β.
+To get the dimension of your own training run, attach a `Recorder` to the optimizer; your loop stays as it is:
+
+```python
+from phdim import Recorder, ph_dim
+
+rec = Recorder(model, n_iterates=200).attach(optimizer)   # records after every optimizer.step()
+...                                                       # your training; call rec.start() near the minimum
+ph_dim(D=rec.distance_matrix())
+```
+
+`rec.record()` records by hand, and `@rec.track` decorates a step function.
+
+Modules: `estimator.py` (distance matrix on CPU or GPU, MST lifetimes, Algorithm 1), `recorder.py` (iterates of any training loop), `levy.py` (β-stable Lévy paths), `shapes.py` (sets of known dimension) and `training.py` (fcn-5 on MNIST with plain SGD, using the recorder). The tests check the estimator on sets of known dimension and on Lévy paths, whose dimension is β.
 
 ## fcn-5 on MNIST
 
