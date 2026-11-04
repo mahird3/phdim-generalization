@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -140,3 +141,86 @@ def test_projection_with_large_weights():
     iu = np.triu_indices(30, 1)
     ratio = proj.distance_matrix()[iu] / full.distance_matrix()[iu]
     assert np.abs(ratio - 1).max() < 0.1
+
+
+def test_loss_recorder_stores_per_example_losses():
+    net, opt, X, y = setup()
+    rec = Recorder(net, n_iterates=5, loss_on=(X, y)).attach(opt)
+    rec.start()
+    expected = []
+    for step in range(5):
+        i = 8 * step
+        opt.zero_grad()
+        F.cross_entropy(net(X[i:i + 8]), y[i:i + 8]).backward()
+        opt.step()
+        with torch.no_grad():
+            expected.append(F.cross_entropy(net(X), y, reduction="none"))
+    expected = torch.stack(expected)
+    torch.testing.assert_close(rec.traj, expected)
+    L = expected.double()
+    rho = (L[:, None, :] - L[None, :, :]).abs().mean(dim=2)  # (1/n) sum_i |l(w, z_i) - l(w', z_i)|
+    np.testing.assert_allclose(rec.distance_matrix(), rho.numpy(), rtol=1e-6, atol=1e-12)
+
+
+def test_loss_recorder_uses_eval_mode_and_does_not_change_training():
+    def setup_with_dropout():
+        net, _, X, y = setup()
+        net = nn.Sequential(net[0], net[1], nn.Dropout(0.5), net[2])
+        return net, torch.optim.SGD(net.parameters(), lr=0.1, momentum=0.9), X, y
+
+    net, opt, X, y = setup_with_dropout()
+    without = plain_loop(net, opt, X, y, n_steps=10)
+    net, opt, X, y = setup_with_dropout()
+    rec = Recorder(net, n_iterates=10, loss_on=(X, y)).attach(opt)
+    with_rec = plain_loop(net, opt, X, y, n_steps=10, rec=rec)
+    torch.testing.assert_close(with_rec, without, rtol=0, atol=0)  # the eval-mode forward uses no random numbers
+    assert net.training  # training mode is restored after each recording
+    net.eval()
+    with torch.no_grad():
+        torch.testing.assert_close(rec.traj[-1], F.cross_entropy(net(X), y, reduction="none"))  # dropout was off
+
+
+def test_loss_distance_ignores_relu_rescaling():
+    net, opt, X, y = setup()
+    rec_w = Recorder(net, n_iterates=2)
+    rec_l = Recorder(net, n_iterates=2, loss_on=(X, y))
+    rec_w.start()
+    rec_l.start()
+    rec_w.record()
+    rec_l.record()
+    with torch.no_grad():  # hidden neuron j: incoming weights and bias times c_j, outgoing weights divided by c_j
+        c = torch.linspace(0.5, 4, 16)
+        net[0].weight.mul_(c[:, None])
+        net[0].bias.mul_(c)
+        net[2].weight.div_(c)
+    rec_w.record()
+    rec_l.record()
+    assert rec_w.distance_matrix()[0, 1] > 0.5  # the weights moved
+    assert rec_l.distance_matrix()[0, 1] < 1e-5  # the function, hence the losses, did not
+
+
+def test_loss_recorder_checks_its_arguments():
+    net, opt, X, y = setup()
+    with pytest.raises(ValueError, match="one recorder for each"):
+        Recorder(net, proj_dim=10, loss_on=(X, y))
+    rec = Recorder(net, loss_on=(X, y), loss_fn=F.cross_entropy)  # mean loss, not one per example
+    rec.start()
+    with pytest.raises(ValueError, match="one loss per example"):
+        rec.record()
+
+
+def test_loss_recorder_random_subset():
+    net, opt, X, y = setup()
+    rec = Recorder(net, loss_on=(X, y), n_examples=20, seed=1)
+    Xs, ys = rec.loss_on
+    assert Xs.shape == (20, 10) and ys.shape == (20,)
+    rows = [(X == x).all(dim=1).nonzero().item() for x in Xs]  # every kept example is a row of X ...
+    assert len(set(rows)) == 20  # ... with no repeats
+    torch.testing.assert_close(ys, y[rows])  # and keeps its own label
+    torch.testing.assert_close(Recorder(net, loss_on=(X, y), n_examples=20, seed=1).loss_on[0], Xs)  # same seed
+    rec.start()
+    rec.record()
+    with torch.no_grad():
+        torch.testing.assert_close(rec.traj[0], F.cross_entropy(net(Xs), ys, reduction="none"))
+    with pytest.raises(ValueError, match="n_examples"):
+        Recorder(net, loss_on=(X, y), n_examples=100)  # X has only 64 examples

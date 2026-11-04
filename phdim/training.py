@@ -59,12 +59,14 @@ def sgd_step(net, opt, X, y):
 
 
 def train_run(train, test, lr, batch_size, n_iterates=200, max_iters=100_000, eval_every=100, seed=0,
-              keep_traj=False):
+              keep_traj=False, loss_on=None):
     """Train fcn-5 to 100% train accuracy, then record n_iterates more SGD iterates.
 
     train and test are (X, y) pairs of tensors on the same device; everything runs on that device.
-    Returns a dict with the accuracies, the gap and the distance matrix D of the iterates
+    Returns a dict with the accuracies, the gap, the final weight norm and the distance matrix D of the iterates
     (only "diverged" and "iters" if the loss became infinite). With keep_traj, also the iterates.
+    With loss_on=(X, y), also "losses": the (n_iterates, len(X)) per-example losses of the same iterates,
+    for loss_distance_matrix (rho_S).
     """
     t0 = time.time()
     (X_train, y_train), (X_test, y_test) = train, test
@@ -74,6 +76,7 @@ def train_run(train, test, lr, batch_size, n_iterates=200, max_iters=100_000, ev
     net = fcn(d_in=X_train.shape[1]).to(device)
     opt = torch.optim.SGD(net.parameters(), lr=lr)  # plain SGD: no momentum, no weight decay
     rec = Recorder(net, n_iterates).attach(opt)
+    rec_loss = Recorder(net, n_iterates, loss_on=loss_on).attach(opt) if loss_on is not None else None
     stream = batches(len(X_train), batch_size, gen)
     run = {"lr": lr, "batch_size": batch_size}
 
@@ -93,6 +96,8 @@ def train_run(train, test, lr, batch_size, n_iterates=200, max_iters=100_000, ev
 
     # phase 2: n_iterates more steps near the minimum; the recorder saves the flattened weights after each
     rec.start()
+    if rec_loss is not None:
+        rec_loss.start()
     while not rec.done:
         idx = next(stream)
         sgd_step(net, opt, X_train[idx], y_train[idx])
@@ -101,7 +106,9 @@ def train_run(train, test, lr, batch_size, n_iterates=200, max_iters=100_000, ev
     test_acc, _ = evaluate(net, X_test, y_test)
     run.update(diverged=not np.isfinite(train_loss), converged=converged, iters=it,
                train_acc=train_acc, test_acc=test_acc, gap=train_acc - test_acc,
-               D=rec.distance_matrix(), seconds=time.time() - t0)
+               w_norm=rec.traj[-1].norm().item(), D=rec.distance_matrix(), seconds=time.time() - t0)
     if keep_traj:
         run["traj"] = rec.traj
+    if rec_loss is not None:
+        run["losses"] = rec_loss.traj
     return run

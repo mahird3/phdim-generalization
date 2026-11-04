@@ -3,7 +3,7 @@ import pytest
 import torch
 from scipy.spatial.distance import cdist
 
-from phdim import distance_matrix, ph0_lifetimes, ph_dim
+from phdim import distance_matrix, loss_distance_matrix, ph0_lifetimes, ph_dim
 from phdim.shapes import circle, cube, embed, sierpinski
 
 
@@ -39,11 +39,21 @@ def test_lifetimes_scale_with_the_points():
                                10 * np.sort(ph0_lifetimes(distance_matrix(X))))
 
 
-def test_duplicate_points_raise():
+def test_duplicate_points_give_a_zero_lifetime():
+    # the MST joins the copy to its twin with an edge of length 0, the other edges are those of the 9 distinct points
     X = np.random.default_rng(0).random((10, 2))
     X[3] = X[7]
-    with pytest.raises(ValueError, match="duplicate"):
-        ph0_lifetimes(distance_matrix(X))
+    lifetimes = ph0_lifetimes(distance_matrix(X))
+    distinct = ph0_lifetimes(distance_matrix(np.delete(X, 3, axis=0)))
+    np.testing.assert_allclose(np.sort(lifetimes), np.sort(np.r_[0.0, distinct]))
+
+
+def test_loss_distance_matrix_known_values():
+    # mean absolute difference: (0.1 + 0.1 + 0) / 3 between the first two rows
+    L = [[0.2, 0.5, 0.1], [0.3, 0.4, 0.1], [0.2, 0.5, 0.1]]
+    D = loss_distance_matrix(L)
+    np.testing.assert_allclose(D, [[0, 0.2 / 3, 0], [0.2 / 3, 0, 0.2 / 3], [0, 0.2 / 3, 0]], atol=1e-15)
+    assert ph0_lifetimes(D).size == 2  # rows 0 and 2 are at distance 0, still one tree on 3 points
 
 
 def test_lifetimes_match_ripser():

@@ -1,5 +1,8 @@
 import numpy as np
+import pytest
 import torch
+import torch.nn.functional as F
+from torch.nn.utils import vector_to_parameters
 
 from phdim import distance_matrix
 from phdim.training import evaluate, fcn, train_run
@@ -42,3 +45,15 @@ def test_train_run_is_reproducible():
               for _ in range(2))
     assert r1["iters"] == r2["iters"]
     np.testing.assert_array_equal(r1["D"], r2["D"])
+
+
+def test_train_run_records_the_losses():
+    data = toy_data()
+    r = train_run(data, data, lr=0.1, batch_size=20, n_iterates=10, max_iters=2000, eval_every=20, keep_traj=True,
+                  loss_on=data)
+    assert r["losses"].shape == (10, 200)
+    net = fcn(d_in=20)
+    vector_to_parameters(r["traj"][-1], net.parameters())
+    with torch.no_grad():
+        torch.testing.assert_close(r["losses"][-1], F.cross_entropy(net(data[0]), data[1], reduction="none"))
+    assert r["w_norm"] == pytest.approx(r["traj"][-1].norm().item())
