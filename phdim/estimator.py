@@ -11,6 +11,7 @@ so the slope m of log E_alpha(k) against log k gives D = alpha / (1 - m).
 
 import numpy as np
 import torch
+from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import minimum_spanning_tree
 
 
@@ -44,14 +45,13 @@ def ph0_lifetimes(D):
 
     Zero distances (duplicate points, or a pseudo-metric such as rho_S) give lifetimes 0.
     """
-    zero = D == 0
-    np.fill_diagonal(zero, False)
-    if not zero.any():
-        return minimum_spanning_tree(D).data
-    # scipy reads a 0 entry as "no edge" and would use a longer edge instead:
-    # make the zero edges the shortest possible ones, then set them back to 0
+    # In a dense matrix scipy reads every entry below 1e-8 as "no edge" and would use a longer edge instead.
+    # In a sparse matrix every stored entry is an edge: store the zero distances as the smallest positive number
+    # (the shortest possible edges), then set them back to 0.
     tiny = np.finfo(np.float64).tiny
-    lifetimes = minimum_spanning_tree(np.where(zero, tiny, D)).data
+    edges = np.where(D == 0, tiny, D)
+    np.fill_diagonal(edges, 0)
+    lifetimes = minimum_spanning_tree(csr_matrix(edges)).data
     lifetimes[lifetimes == tiny] = 0
     return lifetimes
 

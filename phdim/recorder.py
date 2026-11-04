@@ -109,7 +109,7 @@ class Recorder:
         was_training = self.model.training
         self.model.eval()
         try:
-            out = torch.cat([self.loss_fn(self.model(X[i:i + chunk]), y[i:i + chunk])
+            out = torch.cat([self.loss_fn(self.model(X[i:i + chunk]), y[i:i + chunk]).reshape(-1)
                              for i in range(0, len(X), chunk)])
         finally:
             self.model.train(was_training)

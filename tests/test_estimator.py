@@ -53,7 +53,13 @@ def test_loss_distance_matrix_known_values():
     L = [[0.2, 0.5, 0.1], [0.3, 0.4, 0.1], [0.2, 0.5, 0.1]]
     D = loss_distance_matrix(L)
     np.testing.assert_allclose(D, [[0, 0.2 / 3, 0], [0.2 / 3, 0, 0.2 / 3], [0, 0.2 / 3, 0]], atol=1e-15)
-    assert ph0_lifetimes(D).size == 2  # rows 0 and 2 are at distance 0, still one tree on 3 points
+    np.testing.assert_allclose(np.sort(ph0_lifetimes(D)), [0, 0.2 / 3], atol=1e-15)  # rows 0 and 2 are at distance 0
+
+
+def test_lifetimes_keep_very_small_distances():
+    # scipy reads dense entries below 1e-8 as "no edge": the tree must still use them
+    D = np.array([[0, 1e-12, 1.0], [1e-12, 0, 2.0], [1.0, 2.0, 0]])
+    np.testing.assert_allclose(np.sort(ph0_lifetimes(D)), [1e-12, 1.0], rtol=1e-12)
 
 
 def test_lifetimes_match_ripser():
