@@ -11,6 +11,7 @@ so the slope m of log E_alpha(k) against log k gives D = alpha / (1 - m).
 
 import numpy as np
 import torch
+from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import minimum_spanning_tree
 
 
@@ -26,12 +27,33 @@ def distance_matrix(W):
     return torch.cdist(W, W, compute_mode="donot_use_mm_for_euclid_dist").cpu().numpy()
 
 
+def loss_distance_matrix(L):
+    """(K, n) per-example losses, one iterate per row -> (K, K) data-dependent distances
+
+        rho_S(w, w') = (1/n) sum_i |loss(w, z_i) - loss(w', z_i)|
+
+    of Dupuis, Deligiannidis, Simsekli (ICML 2023). Like distance_matrix, it runs on the device of L
+    and returns a numpy array. It is a pseudo-metric: two different weight vectors with the same losses
+    on every example (e.g. a ReLU rescaling of each other) are at distance 0.
+    """
+    L = torch.as_tensor(L, dtype=torch.float64)
+    return (torch.cdist(L, L, p=1) / L.shape[1]).cpu().numpy()
+
+
 def ph0_lifetimes(D):
-    """(k, k) distance matrix -> the k-1 finite PH0 lifetimes, i.e. the MST edge lengths."""
-    if np.any(D[np.triu_indices_from(D, k=1)] == 0):
-        # scipy reads a 0 entry as "no edge": the MST would silently use a longer edge instead
-        raise ValueError("duplicate points: two different points are at distance 0")
-    return minimum_spanning_tree(D).data
+    """(k, k) distance matrix -> the k-1 finite PH0 lifetimes, i.e. the MST edge lengths.
+
+    Zero distances (duplicate points, or a pseudo-metric such as rho_S) give lifetimes 0.
+    """
+    # In a dense matrix scipy reads every entry below 1e-8 as "no edge" and would use a longer edge instead.
+    # In a sparse matrix every stored entry is an edge: store the zero distances as the smallest positive number
+    # (the shortest possible edges), then set them back to 0.
+    tiny = np.finfo(np.float64).tiny
+    edges = np.where(D == 0, tiny, D)
+    np.fill_diagonal(edges, 0)
+    lifetimes = minimum_spanning_tree(csr_matrix(edges)).data
+    lifetimes[lifetimes == tiny] = 0
+    return lifetimes
 
 
 def ph_dim(W=None, D=None, alpha=1.0, k_min=None, k_step=None, n_repeats=1, seed=0, return_curve=False):

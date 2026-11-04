@@ -44,7 +44,9 @@ rec = Recorder(model, n_iterates=200).attach(optimizer)   # records after every 
 rec.ph_dim()                                              # or ph_dim(D=rec.distance_matrix()) to reuse D
 ```
 
-`rec.record()` records by hand, and `@rec.track` decorates a step function.
+`rec.record()` records by hand, and `@rec.track` decorates a step function. For large models, `Recorder(model, proj_dim=1000)` stores a random projection of the weights (1000 numbers per iterate) instead of all of them; the distances, hence the dimension, are nearly unchanged (Johnson–Lindenstrauss).
+
+`Recorder(model, loss_on=(X, y))` records the per-example losses on `(X, y)` instead of the weights, and `rec.ph_dim()` then uses the data-dependent distance of Dupuis, Deligiannidis, Şimşekli (ICML 2023), $\rho_S(w, w') = \frac{1}{n}\sum_i |\ell(w, z_i) - \ell(w', z_i)|$: weight changes that leave every loss unchanged (e.g. ReLU rescalings) count as distance 0, and their bound needs no Lipschitz constant. A random subset of the training set is enough: `Recorder(model, loss_on=(X, y), n_examples=6000)` keeps 6000 examples, drawn once, the same at every step. `loss_distance_matrix(L)` computes the distance from any `(iterates, examples)` loss matrix.
 
 Modules: `estimator.py` (distance matrix on CPU or GPU, MST lifetimes, Algorithm 1), `recorder.py` (iterates of any training loop), `levy.py` (β-stable Lévy paths), `shapes.py` (sets of known dimension) and `training.py` (fcn-5 on MNIST with plain SGD, using the recorder). The tests check the estimator on sets of known dimension and on Lévy paths, whose dimension is β.
 
